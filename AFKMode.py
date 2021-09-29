@@ -38,7 +38,7 @@ class AFKModeMod(loader.Module):
     def __init__(self):
         self.me = None
 
-    async def client_ready(self, message, db):
+    async def client_ready(self, client, db):
         self.db=db
         self.client = client
         self.me = await client.get_me(True)
