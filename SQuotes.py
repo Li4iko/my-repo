@@ -1,164 +1,198 @@
-import telethon, requests, io, base64
 from .. import loader, utils
-from telethon.tl.patched import Message
-from telethon.tl import types
-
+from datetime import datetime, date, time
+from asyncio import sleep
+import os, io, asyncio, pytz, requests
 
 @loader.tds
-class ShitQuotesMod(loader.Module):
-    strings = {
-        "name": "SQuotes"
-    }
+class SeeChatMod(loader.Module):
+    """Логирует все переписки."""
+    strings={"name": "SeeChat"}
 
-    async def client_ready(self, client, db):
-        self.client: telethon.TelegramClient = client
-        self.api_endpoint = "https://quotes.fl1yd.ml/generate"
+    async def client_ready(self, message, db):
+        self.db=db
+        self.db.set("SeeChat", "seechat", True)
 
-
-    async def sqcmd(self, message: Message):
-        """Использование: .sq <реплай>"""
-        args = utils.get_args_raw(message)
-        reply = await message.get_reply_message()
-        if not (args or reply):
-            return await message.edit("Нет аргументов или реплая")
-
-        text, media, id, name, avatar, rank, reply_id, reply_name, reply_text, entities = await self.parse_messages(message, args, reply)
-        payload = {
-            "text": text,
-            "media": media,
-            "entities": entities,
-            "author": {
-                "id": id,
-                "name": name,
-                "avatar": avatar,
-                "rank": rank
-            },
-            "reply": {
-                "id": reply_id,
-                "name": reply_name,
-                "text": reply_text
-            }
-        }
-
-        await message.edit("<b>[SQuotes]</b> Ожидание API...")
-        r = await self._api_request(payload)
-        if r.status_code != 200:
-            return await message.edit("<b>[SQuotes]</b> Ошибка API")
-
-        quote = io.BytesIO(r.content)
-        quote.name = "SQuote.webp"
-
-        await message.edit("<b>[SQuotes]</b> Отправка...")
-        await message.respond(file=quote, reply_to=reply or message)
-        await message.delete()
-
-
-    async def parse_messages(self, message: Message, args, reply: Message):
-        args_ = args.split()
-        text = args
-
-        await message.edit("<b>[SQuotes]</b> Обработка...")
-        user = avatar = reply_id = reply_name = reply_text = entities = None
-        user = message.sender
-        if reply and reply.fwd_from:
-            user_id = reply.fwd_from.from_id
-            text = args or reply.raw_text
-            if user_id:
-                try:
-                    user_id = user_id.channel_id
-                except:
-                    user_id = user_id.user_id
-                name = telethon.utils.get_display_name((await self.client.get_entity(user_id)))
-                name = name[:26] + '...' if len(name) > 25 else name
-
-            if not user_id:
-                user_id = message.chat_id
-                name = reply.fwd_from.from_name
-
+    async def seechatcmd(self, message):
+        """Используй: .seechat | чтобы включить слежку во всех лс чатах."""
+        
+        me = await message.client.get_me()
+        if True:
+            seechat = self.db.get("SeeChat", "seechat")
+            if seechat is not True:
+                await message.edit("[SeeChat] Включен успешно.")
+                self.db.set("SeeChat", "seechat", True)
+            else:
+                await message.edit("[SeeChat] Выключен успешно.")
+                self.db.set("SeeChat", "seechat", False)
         else:
-            if reply:
-                if not args:
-                    if r := await reply.get_reply_message():
-                        reply_id = r.sender.id
-                        reply_name = telethon.utils.get_display_name(r.sender)
-                        reply_name = reply_name[:26] + '...' if len(reply_name) > 25 else reply_name
-                        reply_text = (
-                            "📷 Фото"
-                            if r.photo
-                            else "📊 Опрос"
-                            if r.poll
-                            else "📍 Местоположение"
-                            if r.geo
-                            else "👤 Контакт"
-                            if r.contact
-                            else "🖼 GIF"
-                            if r.gif
-                            else "🎧 Музыка"
-                            if r.audio
-                            else "📹 Видео"
-                            if r.video
-                            else "📹 Видеосообщение"
-                            if r.video_note
-                            else "🎵 Голосовое сообщение"
-                            if r.voice
-                            else r.file.emoji + " Стикер"
-                            if r.sticker
-                            else "💾 Файл"
-                            if r.file
-                            else r.raw_text or "Unsupported message media"
-                        )
-                        reply_text = reply_text[:26] + '...' if len(reply_text) > 25 else reply_text
-                    entities = await self.convert_entities(reply.entities)
-                user = reply.sender
-                text = args or reply.raw_text
+            return await message.edit("<b>У тебя нет прав использовать этот модуль.\n"
+                                      "Обратись к: </b>@sseeeennnnnnn")
+
+    async def setchatcmd(self, message):
+        """Используй: .setchat | чтобы установить этот чат как чат логов."""
+        
+        me = await message.client.get_me()
+        if True:
+            di = "SeeChat/"
+            if os.path.exists(di):
+                None
+            else:
+                os.mkdir(di)
+            chat = await message.client.get_entity(message.to_id)
+            self.db.set("SeeChat", "log", str(chat.id))
+            await message.edit(f"<b>Этот чат был установлен как чат для логов.</b>")
+        else:
+            return await message.edit("<b>У тебя нет прав использовать этот модуль.\n"
+                                      "Обратись к: </b>@sseeeennnnnnn")
+
+    async def seechatscmd(self, message):
+        """Используй: .seechats | чтобы посмотреть список людей в логах."""
+        
+        me = await message.client.get_me()
+        if True:
+            await message.edit("ща покажу")
+            chats = ""
+            number = 0
+            for _ in os.listdir("SeeChat/"):
+                number += 1
+                try:
+                    user = await message.client.get_entity(int(_[:-4]))
+                except: pass
+                if not user.deleted:
+                    chats += f"{number} • <a href=tg://user?id={user.id}>{user.first_name}</a> ID: [<code>{user.id}</code>]\n"
+                else:
+                    chats += f"{number} • Удалённый аккаунт ID: [<code>{user.id}</code>]\n"
+            await message.edit("<b>Пользователи которые есть в логах:</b>\n\n" + chats)
+        else:
+            return await message.edit("<b>У тебя нет прав использовать этот модуль.\n"
+                                      "Обратись к: </b>@sseeeennnnnnn")
+
+    async def gseecmd(self, message):
+        """Используй: .gsee «айди» | чтобы достать файл логов."""
+        
+        me = await message.client.get_me()
+        if True:
+            args = utils.get_args_raw(message)
+            if not args:
+                return await message.edit("<b>Где аргументы дыбил.</b>")
+            try:
+                user = await message.client.get_entity(int(args))
+                await message.edit(f"<b>Файл переписки с: <code>{user.first_name}</code></b>")
+                await message.client.send_file(message.to_id, f"SeeChat/{args}.txt")
+            except: return await message.edit("<b>Произошол взлом жопы.</b>")
+        else:
+            return await message.edit("<b>У тебя нет прав использовать этот модуль.\n"
+                                      "Обратись к: </b>@sseeeennnnnnn")
+
+    async def delseecmd(self, message):
+        """Используй: .delsee «айди» | чтобы удалить файл логов."""
+        
+        me = await message.client.get_me()
+        if True:
+            args = utils.get_args_raw(message)
+            if not args:
+                return await message.edit("<b>Где аргументы дыбил.</b>")
+            if args == "all":
+                os.system("rm -rf SeeChat/*")
+                await message.edit("<b>Все файлы переписок были успешно удалены.</b>")
             else:
                 try:
-                    user = await self.client.get_entity(int(args_[0]) if args_[0].isdigit() else args_[0])
-                    if len(args_) < 2:
-                        user = await self.client.get_entity(int(args) if args.isdigit() else args)
-                    else:
-                        text = args.split(maxsplit=1)[1]
-                except (ValueError, IndexError):
-                    user = message.sender
+                    user = await message.client.get_entity(int(args))
+                    await message.edit(f"<b>Был удален файл переписки с: <code>{user.first_name}</code></b>")
+                    os.remove(f"SeeChat/{args}.txt")
+                except: return await message.edit("<b>Произошол взлом жопы.</b>")
+        else:
+            return await message.edit("<b>У тебя нет прав использовать этот модуль.\n"
+                                      "Обратись к: </b>@sseeeennnnnnn")
 
-            user_id = user.id
+    async def excseecmd(self, message):
+        """Используй: .excsee «айди» | чтобы добавить/исключить пользователя в исключение логов."""
+        
+        me = await message.client.get_me()
+        if True:
+            exception = self.db.get("SeeChat", "exception", [])
+            args = utils.get_args_raw(message)
+            if not args:
+                return await message.edit("<b>Где аргументы дыбил.</b>")
+            if args == "clear":
+                self.db.set("SeeChat", "exception", [])
+                return await message.edit("<b>Список исключений успешно очищен.</b>")
+            try:
+                user = await message.client.get_entity(int(args))
+                if str(user.id) not in exception:
+                    exception.append(str(user.id))
+                    await message.edit(f"<b>{user.first_name}, был добавлен в список исключений.</b>")
+                    os.remove(f"SeeChat/{user.id}.txt")
+                else:
+                    exception.remove(str(user.id))
+                    await message.edit(f"<b>{user.first_name}, был удален из списка исключений.</b>")
+                self.db.set("SeeChat", "exception", exception)
+            except: return await message.edit("<b>Произошол взлом жопы.</b>")
+        else:
+            return await message.edit("<b>У тебя нет прав использовать этот модуль.\n"
+                                      "Обратись к: </b>@sseeeennnnnnn")
+    
+    async def exclistcmd(self, message):
+        """Используй: .exclist | чтобы посмотреть список исключений."""
+        
+        me = await message.client.get_me()
+        if True:
+            exception = self.db.get("SeeChat", "exception", [])
+            number = 0
+            users = ""
+            try:
+                for _ in exception:
+                    user = await message.client.get_entity(int(_))
+                    number += 1
+                    users += f"{number} • <a href=tg://user?id={user.id}>{user.first_name}</a> ID: [<code>{user.id}</code>]\n"
+                await message.edit("<b>Список исключений:</b>\n\n" + users)
+            except: return await message.edit("<b>Произошол взлом жопы.</b>")
+        else:
+            return await message.edit("<b>У тебя нет прав использовать этот модуль.\n"
+                                      "Обратись к: </b>@sseeeennnnnnn")
 
-            name = telethon.utils.get_display_name(user)
-            name = name[:26] + '...' if len(name) > 25 else name
-
-            avatar = await self.client.download_profile_photo(user_id, bytes)
-            avatar = base64.b64encode(avatar).decode() if avatar else None
-
-        thumb = await self.download_thumb(reply)
-        media = await self.client.download_media(thumb, bytes, thumb=-1)
-        media = base64.b64encode(media).decode() if media else None
-
-        rank = ""
-        if not message.is_private:
-            admins = await self.client.get_participants(message.chat_id, filter=types.ChannelParticipantsAdmins)
-            if user in admins:
-                admin = admins[admins.index((await self.client.get_entity(user_id)))].participant
-                rank = admin.rank or "creator" if type(admin) == types.ChannelParticipantCreator else "admin"
-
-        return text, media, user_id, name, avatar, rank, reply_id, reply_name, reply_text, entities
-
-
-    async def download_thumb(self, reply: Message):
-        data = None
-        if reply and reply.media:
-            data = reply.photo or reply.sticker or reply.video or reply.video_note or reply.gif or reply.web_preview
-        return data
-
-
-    async def convert_entities(self, entities):
-        res = []
-        if entities:
-            for entity in entities:
-                d_entity = entity.to_dict()
-                d_entity['type'] = d_entity.pop("_").lstrip('MessageEntity').lower()
-                res.append(d_entity)
-        return res
-
-
-    async def _api_request(self, data: dict):
-        return requests.post(self.api_endpoint, json=data)
+    async def watcher(self, message):
+        me = await message.client.get_me()
+        seechat = self.db.get("SeeChat", "seechat")
+        exception = self.db.get("SeeChat", "exception", [])
+        log = self.db.get("SeeChat", "log", str(me.id))
+        chat = await message.client.get_entity(int(log))
+        timezone = "Europe/Kiev"
+        vremya = datetime.now(pytz.timezone(timezone)).strftime("[%Y-%m-%d %H:%M:%S]")
+        user = await message.client.get_entity(message.chat_id)
+        userid = str(user.id)
+        if True:
+            try:
+                if message.sender_id == me.id: user.first_name = me.first_name
+            except: pass
+            if message.is_private:
+                if seechat is not False:
+                    if userid not in exception:
+                        if not user.bot and not user.verified:
+                            if message.text.lower():
+                                file = open(f"SeeChat/{user.id}.txt", "a", encoding='utf-8')
+                                file.write(f"{user.first_name} >> {message.text} << {vremya}\n\n")
+                            if message.photo:
+                                if message.sender_id == me.id:
+                                    return
+                                else:
+                                    file = io.BytesIO()
+                                    file.name = message.file.name or f"SeeChat{message.file.ext}"
+                                    await message.client.download_file(message, file)
+                                    file.seek(0)
+                                    await message.client.send_message(chat.id, f"<b>Картинка от</b> <code>{user.first_name}</code>:")
+                                    await message.client.send_file(chat.id, file, force_document=False)
+                            if message.voice:
+                                if message.sender_id == me.id:
+                                    return
+                                await message.forward_to(chat.id)
+                            elif message.video_note:
+                                if message.sender_id == me.id:
+                                    return
+                                await message.forward_to(chat.id)
+                            elif message.video:
+                                if message.sender_id == me.id:
+                                    return
+                                await message.forward_to(chat.id)
+        else:
+            return
